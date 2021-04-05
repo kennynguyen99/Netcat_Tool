@@ -21,7 +21,7 @@
 #define MAXDATASIZE 100
 
 
-struct pollfd server_fds[100];
+struct int server_fds[100];
 int nConnections = 0;
 
 int server(struct commandOptions *commandOptions);
@@ -129,16 +129,17 @@ int server(struct commandOptions *commandOptions){
     int listen_fd = createServerSocket();
     int new_sd;
 
-
+    createThread(&serverInThread);
 
     while(TRUE) {
+
         new_sd = accept(listen_fd, (struct sockaddr *) &their_addr, &sin_size);
+
         server_fds[nConnections] = new_sd;
-        createThread(&serverInThread);
 
         // need to pass the index of the fd in the table that was just accepted
         createThread(&connectionThread);
-
+        nConnections++;
     }
 }
 
@@ -151,13 +152,14 @@ void serverInThread(){
         bytesToSend = strlen(send_buff);
 
         for (int i = 0; i < nConnections; i++) {
-            bytesSent = send(server_fds[i].fd, send_buff, bytesToSend, 0);
+            bytesSent = send(server_fds[i], send_buff, bytesToSend, 0);
         }
     }
 }
 
+
 // thread to monitor every connection to write to stdout
-void *connectionThread(void *arg){
+void connectionThread(void *arg){
     args a = *(args *)arg;
     int this_fd_index;
     int closeConnection = FALSE;
