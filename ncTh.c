@@ -157,6 +157,7 @@ int server(struct commandOptions *commandOptions){
     int new_sd;
     struct Thread newConnectionThread;
     int *sem_value;
+    int fd_index;
 
     detachThread(createThread(&serverInThread, &listen_fd));
 
@@ -178,10 +179,11 @@ int server(struct commandOptions *commandOptions){
             break;
         }
 
-        server_fds[nConnections-1] = new_sd;
+        fd_index = nConnections-1;
+        server_fds[fd_index] = new_sd;
 
         // create a new thread to monitor this connection
-        newConnectionThread = createThread(&connectionThread, &new_sd);
+        newConnectionThread = createThread(&connectionThread, &fd_index);
         detachThread(&newConnectionThread);
     }
 
@@ -218,9 +220,9 @@ void serverInThread(void *listen_fd){
 void connectionThread(void *fd_index)
 {
     // args a = *(args *)arg;
-    int closeConnection = FALSE;
     int VERBOSE = commandOptions->option_v;
     int this_fd_index = *(int *)fd_index; // This would be pased in args.
+
     if (VERBOSE)
     {
         printf("Descriptor %d is readable\n", server_fds[this_fd_index]);
@@ -255,7 +257,6 @@ void connectionThread(void *fd_index)
             {
                 printf("Connection closed\n");
             }
-            closeConnection = TRUE;
             break;
         }
 
@@ -275,6 +276,21 @@ void connectionThread(void *fd_index)
             }
         }
     } while (TRUE);
+
+    close(server_fds[this_fd_index]);
+
+    server_fds[this_fd_index] = -1;
+
+    // compress array
+    for (int i = 0; i < nConnections; i++){
+        if (server_fds[i] == -1){
+            for(int j = i; j < nConnections; j++){
+                server_fds[j] = server_fds[j+1];
+            }
+            i--;
+            break;
+        }
+    }
 
     sem_post(mutex);
     return NULL;
@@ -393,7 +409,7 @@ void clientRecvThread(void *connection_fd)
     {
         // receive data on this connection until the recv fails with EWOULDBLOCK
         // If any other failure occurs, we will close the connection
-        bytesReceived = recv(this_fd, recv_buff, sizeof(recv_buff), MSG_DONTWAIT);
+        bytesReceived = recv(this_fd, recv_buff, sizeof(recv_buff), 0);
 
         if (bytesReceived < 0)
         {
@@ -401,6 +417,7 @@ void clientRecvThread(void *connection_fd)
             {
                 printf("Bytes received <0\n");
             }
+
             if (errno != EWOULDBLOCK)
             {
                 perror("recv() failed");
